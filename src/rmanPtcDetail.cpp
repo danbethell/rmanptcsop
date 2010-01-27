@@ -13,8 +13,6 @@ rmanPtcDetail::rmanPtcDetail() :
     nPoints(0),
     nChannels(0),
     datasize(0),
-    vartypes(0),
-    varnames(0),
     display_probability(1.f),
     use_cull_bbox(false)
 {

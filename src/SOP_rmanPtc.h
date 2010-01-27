@@ -17,8 +17,8 @@ namespace rmanPtcSop
             static CH_LocalVariable	 myVariables[];
             static void buildChannelMenu( void *data, PRM_Name *theMenu, int theMaxSize, const PRM_SpareData *, PRM_Parm * );
 
-            std::vector<std::string> mChannelNames; // channel names
         protected:
+
             // ctor/dtor
             SOP_rmanPtc( OP_Network *net, const char *name, OP_Operator *op );
             virtual ~SOP_rmanPtc();
@@ -33,13 +33,9 @@ namespace rmanPtcSop
             // cook the sop!
             virtual OP_ERROR cookMySop( OP_Context &context );
 
-
-            //virtual float getVariableValue( int index, int thread );
-
-            /// Disable parameters according to other parameters.
-            //virtual unsigned disableParms();
-
         private:
+
+            // access methods which cache parameter values
             UT_String getPtcFile(float t)
             {
                 std::string old(mPtcFile.buffer());
@@ -47,6 +43,14 @@ namespace rmanPtcSop
                 if ( std::string(mPtcFile.buffer())!=old )
                     mReload = true;
                 return mPtcFile;
+            }
+            int getBoundOnLoad(float t)
+            {
+                int old = mBoundOnLoad;
+                mBoundOnLoad = evalInt( "bboxload", 0, t );
+                if ( mBoundOnLoad!=old )
+                    mReload = true;
+                return mBoundOnLoad;
             }
             int getLoadPercentage(float t)
             {
@@ -72,12 +76,67 @@ namespace rmanPtcSop
                     mRedraw = true;
                 return mGlPreview;
             }
+            float getPointSize(float t)
+            {
+                float old = mPointSize;
+                mPointSize = evalFloat( "pointsize", 0, t );
+                if ( mPointSize!=old )
+                    mRedraw = true;
+                return mPointSize;
+            }
+            int getUseDisk(float t)
+            {
+                int old = mUseDisk;
+                mUseDisk = evalInt( "usedisk", 0, t );
+                if ( mUseDisk!=old )
+                    mRedraw = true;
+                return mUseDisk;
+            }
+            void updateBBox( const GU_Detail *input )
+            {
+                if (!input)
+                {
+                    if ( mHasBBox )
+                    {
+                        mRedraw = true;
+                        if ( mBoundOnLoad )
+                            mReload = true;
+                    }
+                    mHasBBox = false;
+                }
+                else
+                {
+                    UT_BoundingBox old = mBBox;
+                    input->getBBox( &mBBox );
+                    if ( (!mHasBBox) || mBBox!=old )
+                    {
+                        mRedraw = true;
+                        if ( mBoundOnLoad )
+                            mReload = true;
+                    }
+                    mHasBBox = true;
+                }
+            }
 
+            // member storage of cached parameter values
             bool mReload, mRedraw; // do we need to reload/redraw the ptc?
             UT_String mPtcFile; // our ptc file
+            int mBoundOnLoad; // use bbox to cull on load?
             int mLoadPercentage; // % of points to load into memory
             int mDisplayPercentage; // % of points to display
             int mGlPreview; // use gl preview
+            float mPointSize; // point/disk size
+            int mUseDisk; // render as disks
+            std::vector<std::string> mChannelNames; // channel names
+
+            UT_BoundingBox mBBox;
+            bool mHasBBox;
+
+            // storage
+            std::vector<UT_Vector3> cachePoints;
+            std::vector<UT_Vector3> cacheNormals;
+            std::vector<float> cacheRadius;
+            std::vector<float> cacheData;
     };
 }
 

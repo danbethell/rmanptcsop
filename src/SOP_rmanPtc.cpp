@@ -10,6 +10,7 @@
 #include <OP/OP_Operator.h>
 #include <OP/OP_OperatorTable.h>
 #include <GU/GU_PrimPart.h>
+#include <GEO/GEO_AttributeHandle.h>
 
 // c++ stuff
 #include <sstream>
@@ -39,21 +40,35 @@ void newSopOperator(OP_OperatorTable *table)
 
 static PRM_Name ptcFileName("ptcFile", "Ptc File");
 static PRM_Name percentageName("perc", "Load %%%");
+static PRM_Name boundOnLoadName("bboxload", "Bound On Load");
+static PRM_Default boundOnLoadDefault(0.0);
 static PRM_Name displayPercentageName("disp", "Output %%%");
 static PRM_Default percentageDefault( 100.0 );
 static PRM_Range percentageRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 100 );
 static PRM_Name previewName("gl", "OpenGL Preview");
 static PRM_Default previewDefault( 1.0 );
+static PRM_Name pointSizeName("pointsize", "Point/Disk Size");
+static PRM_Default pointSizeDefault( 1.0 );
+static PRM_Range pointSizeRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 10 );
+static PRM_Name useDiskName("usedisk", "Preview Disks");
+static PRM_Default useDiskDefault( 0 );
 static PRM_Name channelName("chan", "Preview Channel");
 static PRM_ChoiceList channelMenu( PRM_CHOICELIST_SINGLE, &SOP_rmanPtc::buildChannelMenu );
 
+static PRM_Name sep1("sep1", "Sep1");
+static PRM_Name sep2("sep2", "Sep2");
+
 PRM_Template SOP_rmanPtc::myParameters[] = {
     PRM_Template(PRM_FILE, 1, &ptcFileName),
+    PRM_Template(PRM_TOGGLE, 1, &boundOnLoadName, &boundOnLoadDefault),
     PRM_Template(PRM_INT, 1, &percentageName, &percentageDefault, 0, &percentageRange),
+    PRM_Template(PRM_SEPARATOR, 1, &sep1),
     PRM_Template(PRM_INT, 1, &displayPercentageName, &percentageDefault, 0, &percentageRange),
-    PRM_Template(PRM_SEPARATOR),
+    PRM_Template(PRM_SEPARATOR, 1, &sep2),
     PRM_Template(PRM_TOGGLE, 1, &previewName, &previewDefault ),
     PRM_Template(PRM_ORD, 1, &channelName, 0, &channelMenu ),
+    PRM_Template(PRM_FLT, 1, &pointSizeName, &pointSizeDefault, 0, &pointSizeRange ),
+    PRM_Template(PRM_TOGGLE, 1, &useDiskName, &useDiskDefault ),
     PRM_Template()
 };
 
@@ -61,17 +76,23 @@ PRM_Template SOP_rmanPtc::myParameters[] = {
 enum {
 	VAR_PTCFILE,	// Our ptc file
 	VAR_PERCENTAGE,	// Percentage to draw
+	VAR_BOUNDONLOAD, // Bound on load?
     VAR_DISPLAYPERCENTAGE, // cache points in memory
     VAR_GLPREVIEW, // use gl to preview values
     VAR_CHANNEL, // display channel
+    VAR_POINTSIZE,
+    VAR_USEDISK,
 };
 
 CH_LocalVariable SOP_rmanPtc::myVariables[] = {
     { "PTCFILE",	VAR_PTCFILE, 0 },		// The table provides a mapping
     { "PERCENTAGE",	VAR_PERCENTAGE, 0 },    // from text string to integer token
+    { "BOUNDONLOAD", VAR_BOUNDONLOAD, 0},
     { "DISPLAYPERCENTAGE", VAR_DISPLAYPERCENTAGE, 0 },    // from text string to integer token
     { "GLPREVIEW", VAR_GLPREVIEW, 0 },
     { "CHANNEL", VAR_CHANNEL, 0 },
+    { "POINTSIZE", VAR_POINTSIZE, 0 },
+    { "USEDISK", VAR_USEDISK, 0 },
     { 0, 0, 0 },
 };
 
@@ -115,9 +136,14 @@ SOP_rmanPtc::SOP_rmanPtc(OP_Network *net, const char *name, OP_Operator *op)
 	: SOP_Node(net, name, op),
       mReload(false),
       mRedraw(false),
-      mPtcFile(""),
+      mPtcFile("unknown"),
+      mBoundOnLoad(false),
       mLoadPercentage(100),
-      mDisplayPercentage(100)
+      mDisplayPercentage(100),
+      mGlPreview(1),
+      mPointSize(1.0),
+      mUseDisk(0),
+      mHasBBox(false)
 {
 }
 
@@ -156,6 +182,9 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
     int loadPercentage = getLoadPercentage(now);
     int displayPercentage = getDisplayPercentage(now);
     int glPreview = getGlPreview(now);
+    float pointSize = getPointSize(now);
+    int useDisk = getUseDisk(now);
+    int boundOnLoad = getBoundOnLoad(now);
 
     // lock inputs
     if ( lockInputs(context) >= UT_ERROR_ABORT)
@@ -177,27 +206,17 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         // start our work
         boss->opStart("Building rmanPtc output");
 
-        // are we going to draw using openGl?
-        ptc_gdp->use_gl = glPreview;
-
         // get our bbox
+        bool has_bbox = false;
         const GU_Detail *input_geo = inputGeo( 0, context );
-        if ( input_geo )
-        {
-            input_geo->getBBox( &ptc_gdp->cull_bbox );
-            ptc_gdp->use_cull_bbox = true;
-            mRedraw = true; // this should be cached so only true when bbox changes
-        }
-        else
-        {
-            if ( ptc_gdp->use_cull_bbox )
-            {
-                ptc_gdp->use_cull_bbox = false;
-                mRedraw = true;
-            }
-        }
+        updateBBox( input_geo );
 
-        // what percentage of points to display?
+        // pass information to our detail
+        ptc_gdp->use_gl = glPreview;
+        ptc_gdp->point_size = pointSize;
+        ptc_gdp->use_disk = useDisk;
+        ptc_gdp->cull_bbox = mBBox;
+        ptc_gdp->use_cull_bbox = (mHasBBox&&(!mBoundOnLoad))?true:false;
         ptc_gdp->display_probability = displayPercentage/100.f;
 
         // here we load our ptc
@@ -205,114 +224,193 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         {            
             // clear everything
             mChannelNames.clear();
-            ptc_gdp->cachePoints.clear();
-            ptc_gdp->cacheNormals.clear();
-            ptc_gdp->cacheRadius.clear();
-            ptc_gdp->cacheData.clear();
+            cachePoints.clear();
+            cacheNormals.clear();
+            cacheRadius.clear();
+            cacheData.clear();
             mRedraw = true;
             
-            if ( mPtcFile!="" )
+            // open the point cloud
+            PtcPointCloud ptc = PtcSafeOpenPointCloudFile( const_cast<char*>(ptcFile.buffer()) );
+            if ( !ptc )
             {
-                // open the point cloud
-                PtcPointCloud ptc = PtcSafeOpenPointCloudFile( const_cast<char*>(ptcFile.buffer()) );
-                if ( !ptc )
-                {
-                    UT_String msg( "Unable to open input file: " );
-                    msg += ptcFile;
-                    addError( SOP_MESSAGE, msg);
-                    boss->opEnd();
-                    return error();
-                }
-
-                // get some information
-                ptc_gdp->path = std::string(ptcFile.fileName());
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("npoints"), &ptc_gdp->nPoints );
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("npointvars"), &ptc_gdp->nChannels );
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvartypes"), &ptc_gdp->vartypes );
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvarnames"), &ptc_gdp->varnames );
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("datasize"), &ptc_gdp->datasize );
-                PtcGetPointCloudInfo( ptc, const_cast<char*>("bbox"), ptc_gdp->bbox );
-
-                // our channel names
-                for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
-                {
-                    std::string name( std::string(ptc_gdp->vartypes[i]) + std::string(" ") + std::string(ptc_gdp->varnames[i]) );
-                    mChannelNames.push_back( name );
-                }
-
-                // what percentage of points to load?
-                float load_probability = loadPercentage/100.f;
-
-                // load a percentage of points into memory
-                ptcVec point, normal;
-                float radius;
-                float data[ptc_gdp->datasize];            
-                srand(0);
-                for ( unsigned int i=0; i<ptc_gdp->nPoints; ++i )
-                {
-                    PtcReadDataPoint( ptc, point.val, normal.val, &radius, data );
-                    
-                    // discard a percentage of our points
-                    if ( rand()/(float)RAND_MAX>load_probability )
-                        continue;
-                    
-                    ptc_gdp->cachePoints.push_back( point );
-                    ptc_gdp->cacheNormals.push_back( normal );
-                    ptc_gdp->cacheRadius.push_back( radius );
-                    for ( unsigned int j=0; j<ptc_gdp->datasize; ++j )
-                        ptc_gdp->cacheData.push_back( data[j] );
-
-                    if ( boss->opInterrupt() )
-                        break;
-                }
-                ptc_gdp->nLoaded = ptc_gdp->cachePoints.size();
-
-                // mark our detail as valid and close our ptc
-                PtcClosePointCloudFile( ptc );
-                mReload = false;
+                UT_String msg( "Unable to open input file: " );
+                msg += ptcFile;
+                addError( SOP_MESSAGE, msg);
+                boss->opEnd();
+                return error();
             }
+
+            // get some information
+            ptc_gdp->path = std::string(ptcFile.fileName());
+            char **vartypes, **varnames;
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("npoints"), &ptc_gdp->nPoints );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("npointvars"), &ptc_gdp->nChannels );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvartypes"), &vartypes );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvarnames"), &varnames );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("datasize"), &ptc_gdp->datasize );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("bbox"), ptc_gdp->bbox );
+
+            // our channel names
+            ptc_gdp->types.clear();
+            ptc_gdp->names.clear();
+            for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
+            {
+                ptc_gdp->types.push_back( std::string(vartypes[i]) );
+                ptc_gdp->names.push_back( std::string(varnames[i]) );
+                std::string name = ptc_gdp->types[i] + " " + ptc_gdp->names[i];
+                mChannelNames.push_back( name );
+            }
+
+            // what percentage of points to load?
+            float load_probability = loadPercentage/100.f;
+
+            // load a percentage of points into memory
+            float point[3], normal[3];
+            float radius;
+            float data[ptc_gdp->datasize];
+            srand(0);
+            for ( unsigned int i=0; i<ptc_gdp->nPoints; ++i )
+            {
+                PtcReadDataPoint( ptc, point, normal, &radius, data );
+
+                // bound on load
+                if ( boundOnLoad )
+                {
+                    UT_Vector3 pt( point[0], point[1], point[2] );
+                    if ( !mBBox.isInside(pt) )
+                        continue;
+                }
+
+                // discard a percentage of our points
+                if ( rand()/(float)RAND_MAX>load_probability )
+                    continue;
+
+                // put points into our cache
+                cachePoints.push_back( point );
+                cacheNormals.push_back( normal );
+                cacheRadius.push_back( radius );
+                for ( unsigned int j=0; j<ptc_gdp->datasize; ++j )
+                    cacheData.push_back( data[j] );
+
+                if ( boss->opInterrupt() )
+                    break;
+            }
+            ptc_gdp->nLoaded = cachePoints.size();
+
+            // mark our detail as valid and close our ptc
+            PtcClosePointCloudFile( ptc );
+            mReload = false;
 
             // force update on channel parameter
             getParm("chan").revertToDefaults(now);
         }
 
+        // build a new primitive
+        GU_PrimParticle::build( ptc_gdp, cachePoints.size(), 0 );
+
         // create our output geometry using the output % parameter (same as GR_ uses to preview) 
-        std::vector<ptcVec>::const_iterator pos_it = ptc_gdp->cachePoints.begin();   
-        GU_PrimParticle::build( ptc_gdp, ptc_gdp->cachePoints.size(), 0 );
+        std::vector<UT_Vector3>::const_iterator pos_it = cachePoints.begin();
+        std::vector<UT_Vector3>::const_iterator norm_it = cacheNormals.begin();
+        std::vector<float>::const_iterator rad_it = cacheRadius.begin();
+        std::vector<float>::const_iterator data_it = cacheData.begin();
+
+        // add some attributes
+        int n_attrib = ptc_gdp->addPointAttrib( "N", sizeof(UT_Vector3), GB_ATTRIB_VECTOR, 0 );
+        int r_attrib = ptc_gdp->addPointAttrib( "radius", sizeof(float), GB_ATTRIB_FLOAT, 0 );
+
+        // our data attributes
+        std::vector<GB_AttribType> data_types;
+        std::vector<int> data_size;
+        std::vector<int> data_attribs;
+        for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
+        {
+            GB_AttribType type = GB_ATTRIB_FLOAT; // float, vector
+            int size = 1;
+            if ( ptc_gdp->types[i] == "point" ||
+                    ptc_gdp->types[i] == "vector" ||
+                    ptc_gdp->types[i] == "normal" )
+            {
+                type = GB_ATTRIB_VECTOR;
+                size = 3;
+            }
+            if ( ptc_gdp->types[i] == "color" )
+            {
+                size=3;
+            }
+            if ( ptc_gdp->types[i] == "matrix" )
+            {
+                size=16;
+            }
+            data_attribs.push_back(
+                    ptc_gdp->addPointAttrib( ptc_gdp->names[i].c_str(),
+                            sizeof(float)*size, type, 0 ) );
+            data_types.push_back( type );
+            data_size.push_back( size );
+        }
+
+        // add data from our cache, based on display/output probability
         srand(0);
-        for ( pos_it=ptc_gdp->cachePoints.begin(); pos_it!=ptc_gdp->cachePoints.end(); ++pos_it )
-        {               
+        unsigned int pos = 0;
+        while( pos_it!=cachePoints.end() )
+        {
             if ( rand()/(float)RAND_MAX<=ptc_gdp->display_probability )
             {
                 if ( !ptc_gdp->use_cull_bbox )
                 {                   
                     // add to our SOP geometry
                     GEO_Point *pt = ptc_gdp->appendPoint();
-                    pt->setPos( UT_Vector3( pos_it->val[0], pos_it->val[1], pos_it->val[2] ) ); 
-                }
-                else // we cull with a bbox
-                {
-                    UT_Vector3 pt_pos( pos_it->val[0], pos_it->val[1], pos_it->val[2] );
-                    if ( ptc_gdp->cull_bbox.isInside( pt_pos ) )
+                    pt->setPos( *pos_it );
+                    (*pt->castAttribData<UT_Vector3>(n_attrib)) = *norm_it;
+                    (*pt->castAttribData<float>(r_attrib)) = *rad_it;
+                    const float *data = &*data_it;
+                    for ( unsigned int i=0; i<data_types.size(); ++i )
                     {
-                        GEO_Point *pt = ptc_gdp->appendPoint();
-                        pt->setPos( pt_pos );
+                        float *ptr = pt->castAttribData<float>(data_attribs[i]);
+                        memcpy( (void*)ptr, (void*)data,
+                                    sizeof(float)*data_size[i] );
+                        data += data_size[i];
                     }
                 }
-
+                else // we cull with our bbox
+                {
+                    if ( ptc_gdp->cull_bbox.isInside( *pos_it ) )
+                    {
+                        GEO_Point *pt = ptc_gdp->appendPoint();
+                        pt->setPos( *pos_it );
+                        (*pt->castAttribData<UT_Vector3>(n_attrib)) = *norm_it;
+                        (*pt->castAttribData<float>(r_attrib)) = *rad_it;
+                        const float *data = &*data_it;
+                        for ( unsigned int i=0; i<data_types.size(); ++i )
+                        {
+                            float *ptr = pt->castAttribData<float>(data_attribs[i]);
+                            memcpy( (void*)ptr, (void*)data,
+                                        sizeof(float)*data_size[i] );
+                            data += data_size[i];
+                        }
+                    }
+                }
             }
+
+            // increment our interators
+            pos_it++;
+            norm_it++;
+            rad_it++;
+            data_it+=ptc_gdp->datasize;
+            pos++;
         }
+
+        // delete our particle primitive
         ptc_gdp->deletePrimitive(0,0);
         
         // info in sop's message area
         std::stringstream ss;
         ss << "Name: " << ptc_gdp->path << std::endl;
         ss << "Points: " << ptc_gdp->nPoints << " - [ " << ptc_gdp->nLoaded << " loaded ]" << std::endl;
-        ss << "Channels: " << ptc_gdp->nChannels;
+        ss << "Channels: " << ptc_gdp->nChannels << std::endl;
+        for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
+            ss << "  " << i << ": " << mChannelNames[i] << std::endl;
         addMessage( SOP_MESSAGE, ss.str().c_str() );
-
-        // Select our geometry
-        //select(GU_SPrimitive);
 
         // Tell the interrupt server that we've completed
         boss->opEnd();
@@ -326,16 +424,3 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
     unlockInputs();
     return error();
 }
-
-/*
-float SOP_rmanPtc::getVariableValue(int index, int thread)
-{
-    switch (index)
-    {
-    case VAR_PERCENTAGE:   
-        return mPercentage;
-    }
-
-    return SOP_Node::getVariableValue(index, thread);
-}
-*/

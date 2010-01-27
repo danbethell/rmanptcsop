@@ -14,12 +14,6 @@
 
 namespace rmanPtcSop
 {
-    class ptcVec
-    {
-    public: 
-        float val[3];
-    };
-
     class rmanPtcDetail : public GU_Detail
     {
         public:
@@ -32,24 +26,28 @@ namespace rmanPtcSop
             int nLoaded;
             int nChannels;
             int datasize;
-            char **vartypes;
-            char **varnames;
+            std::vector<std::string> types;
+            std::vector<std::string> names;
             std::string path;
             float bbox[6];
             float display_probability;
 
             // draw with opengl
             bool use_gl;
+            float point_size;
+            bool use_disk;
 
             // cull bounding box
             bool use_cull_bbox;
             UT_BoundingBox cull_bbox;
 
             // cached storage
-            std::vector<ptcVec> cachePoints;
-            std::vector<ptcVec> cacheNormals;
+            /*
+            std::vector<UT_Vector3> cachePoints;
+            std::vector<UT_Vector3> cacheNormals;
             std::vector<float> cacheRadius;
             std::vector<float> cacheData;
+            */
     };
 }
 

@@ -43,6 +43,10 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
     GEO_Primitive 	*prim;
     UT_Vector3		 v3;
 
+    // BOMB OUT EARLY
+    return;
+
+
     rmanPtcSop::rmanPtcDetail *detail = dynamic_cast<rmanPtcSop::rmanPtcDetail*>(gdp);
     if ( !detail )
         return;
@@ -64,8 +68,9 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
 
         srand(0);
         glBegin(GL_POINTS);
-        std::vector<ptcVec>::const_iterator pos_it = detail->cachePoints.begin();
-        std::vector<ptcVec>::const_iterator norm_it = detail->cacheNormals.begin();
+        /*
+        std::vector<UT_Vector3>::const_iterator pos_it = detail->cachePoints.begin();
+        std::vector<UT_Vector3>::const_iterator norm_it = detail->cacheNormals.begin();
         std::vector<float>::const_iterator rad_it = detail->cacheRadius.begin();
         std::vector<float>::const_iterator data_it = detail->cacheData.begin();
         float data[detail->datasize];
@@ -80,15 +85,14 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
                 if ( !detail->use_cull_bbox )
                 {                    
                     glColor3f( data[0], data[1], data[2] );
-                    glVertex3f( pos_it->val[0], pos_it->val[1], pos_it->val[2] );
+                    glVertex3f( pos_it->x(), pos_it->y(), pos_it->z() );
                 }
                 else // we cull with a bbox
                 {
-                    UT_Vector3 pt( pos_it->val[0], pos_it->val[1], pos_it->val[2] );
-                    if ( detail->cull_bbox.isInside( pt ) )
+                    if ( detail->cull_bbox.isInside( *pos_it ) )
                     {
                         glColor3f( data[0], data[1], data[2] );
-                        glVertex3f( pos_it->val[0], pos_it->val[1], pos_it->val[2] );
+                        glVertex3f( pos_it->x(), pos_it->y(), pos_it->z() );
                     }
                 }
             }
@@ -96,7 +100,7 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
             rad_it++;
             data_it+=detail->datasize;
         }
-        
+        */
         glEnd();
         
         glEndList();
