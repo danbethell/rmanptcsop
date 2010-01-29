@@ -1,0 +1,135 @@
+/*! 
+\mainpage RmanPtcSop
+\section Overview
+The RmanPtcSop project is a Houdini geometry operator (SOP) for loading and
+displaying RenderMan point clouds. It is based on the open source 
+<a href="http://dneg.github.com/dnPtcViewerNode">dnPtcViewerNode</a> project
+from Double Negative Visual Effects. 
+
+\image html rmanPtc_sop.png
+
+Features of the <b>rmanPtc</b> SOP include:
+<ul>
+<li>Independent control for limiting the number of points loaded and displayed.</li>
+<li>Geometry output for all point attributes in the cloud.</li>
+<li>OpenGL display preview for attributes as point or disk primitives.</li>
+<li>Ability to cull points based on a reference bounding box.</li>
+</ul>
+
+\image html rmanPtc_grab1_small.jpg
+
+<b>RenderMan® is a registered trademark of Pixar.<br>
+Houdini® is a registered trademark of Side Effects Software.</b>
+
+The code is freely available from http://github.com/danbethell/rmanptcsop
+and is released under the New BSD license. See \link COPYING \endlink
+for more details.
+
+For information on building and installing the Houdini plugin see the \link BUILDING Building & Installation\endlink page.
+
+\section loading Loading Point Clouds
+
+\section information Point Cloud Information
+
+\section output Display & Geometry Output
+
+\section display Display Options
+
+\section bounds Bounding Point Clouds
+
+\section tips Hints & Tips
+<ul>
+<li>To apply transformation to the OpenGL preview use an <b>Object</b> level transform. Using a Transform node in the Geometry context (i.e. a transformSop) will move the output point geometry but will clear the preview rendering.</li>
+</ul>
+
+\section authors Authors
+<ul><li>Dan Bethell (danbethell at gmail dot com)</li></ul>
+
+\section thanks Thanks
+<ul><li>Philippe Leprince and Michael Jones from <a href="http://dneg.com">Double Negative Visual Effects</a> for the <a href="http://dneg.github.com/dnPtcViewerNode">dnPtcViewerNode</a> project.</li></ul>
+
+\page BUILDING Building & Installation
+The plugin will theoretically build for any RenderMan-compatible renderer
+that implements the pointcloud api but the included <a href="http://cmake.com">
+CMake</a> build script assumes you have <a href="http://3delight.com">3Delight</a> 
+or <a href="http://renderman.pixar.com">PRMan</a> installed.
+
+Ensure you have <a href="http://www.sidefx.com">Houdini</a> (10.*), 
+either <a href="http://www.3delight.com">3Delight</a> (9.0) or 
+<a href="http://renderman.pixar.com">PRMan</a> (15.0) and
+<a href="http://cmake.org/">CMake</a> (2.8) installed. You should set the
+following environment variables before running <i>cmake</i>.
+<ul>
+ <li><b>RMAN</b> - set to either <b>3Delight</b> or <b>PRMan</b>
+ <li><b>DELIGHT</b> - (3Delight only) the path to your 3Delight installation.
+ <li><b>RMANTREE</b> - (PRMan only) the path to your RPS installation.
+ <li><b>HFS</b> - The path to your Houdini install.
+</ul>
+
+Once built you will need to copy the plugin and the support files (located in 
+the <i>share</i> subdirectory) to a destination that Houdini recognises. 
+For more information on custom plugins and support file installation locations 
+please refer to the 
+<a href="http://www.sidefx.com/docs/hdk10.0/hdk_intro_creatingplugins.html">
+Creating Custom Plugins</a> section of the HDK Documentation.
+
+<table><tr>
+<td><b>File</b></td>
+<td><b>Search Path</b></td>
+<td><b>Example Destination</b></td>
+</tr>
+<tr>
+<td>Plugin (rmanPtcSop.so)</td>
+<td><pre>$HOUDINI_DSO_PATH</pre></td>
+<td><i>$HOME/houdiniX.Y/dso</i></td>
+</tr>
+<tr>
+<td>Operator Icon (rmanPtc.svg)</td>
+<td><pre>$HOUDINI_UI_ICON_PATH</pre></td>
+<td><i>$HOME/houdiniX.Y/config/Icons</i></td>
+</tr>
+<tr>
+<td>Help Card (rmanPtc.txt)</td>
+<td><pre>$HOUDINI_PATH/help</pre></td>
+<td><i>$HOME/houdiniX.Y/help/nodes/sop</i></td>
+</tr>
+<tr>
+<td>Help Card Icon (rmanPtc.png)</td>
+<td><pre>$HOUDINI_PATH/help</pre></td>
+<td><i>$HOME/houdiniX.Y/help/nodes/sop</i></td>
+</tr>
+</table>
+
+
+
+\page COPYING
+© Copyright 2010, Dan Bethell.<br>
+© Copyright 2009, Double Negative Visual Effects.<br>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+<ul>
+    <li>Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.</li>
+
+    <li>Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.</li>
+
+    <li>Neither the names of RmanPtcSop, Double Negative Visual Effects, nor the 
+    names of its contributors may be used to endorse or promote products derived 
+    from this software without specific prior written permission.</li>
+</ul>
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */

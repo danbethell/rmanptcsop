@@ -1,3 +1,34 @@
+/*
+Copyright (c) 2010, Dan Bethell.
+Copyright (c) 2009, Double Negative Visual Effects.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+    * Neither the names of RmanPtcSop, Double Negative Visual Effects,
+    nor the names of its contributors may be used to endorse or promote products
+    derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 // houdini
 #include <UT/UT_DSOVersion.h>
 #include <UT/UT_Math.h>
@@ -21,9 +52,9 @@
 // local
 #include "rmanPtcDetail.h"
 #include "SOP_rmanPtc.h"
-
 using namespace rmanPtcSop;
 
+// our Sop table
 void newSopOperator(OP_OperatorTable *table)
 {
     table->addOperator(
@@ -38,61 +69,67 @@ void newSopOperator(OP_OperatorTable *table)
 	    );
 }
 
+// parameter names, ranges & defaults
 static PRM_Name ptcFileName("ptcFile", "Ptc File");
 static PRM_Name percentageName("perc", "Load %%%");
 static PRM_Name boundOnLoadName("bboxload", "Bound On Load");
 static PRM_Default boundOnLoadDefault(0.0);
-static PRM_Name displayPercentageName("disp", "Output %%%");
+static PRM_Name displayPercentageName("disp", "Display / Output %%%");
 static PRM_Default percentageDefault( 100.0 );
 static PRM_Range percentageRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 100 );
-static PRM_Name previewName("gl", "OpenGL Preview");
-static PRM_Default previewDefault( 1.0 );
+static PRM_Name channelName("chan", "Display Channel");
+static PRM_ChoiceList channelMenu( PRM_CHOICELIST_SINGLE,
+        &SOP_rmanPtc::buildChannelMenu );
+static PRM_Name onlyOutputPreviewChannelName( "dispchanonly",
+        "Output Display Channel Only" );
+static PRM_Default onlyOutputPreviewChannelDefault( 1.0 );
+static PRM_Name useDiskName("usedisk", "Display Disks");
+static PRM_Default useDiskDefault( 0 );
 static PRM_Name pointSizeName("pointsize", "Point/Disk Size");
 static PRM_Default pointSizeDefault( 1.0 );
 static PRM_Range pointSizeRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 10 );
-static PRM_Name useDiskName("usedisk", "Preview Disks");
-static PRM_Default useDiskDefault( 0 );
-static PRM_Name channelName("chan", "Preview Channel");
-static PRM_ChoiceList channelMenu( PRM_CHOICELIST_SINGLE, &SOP_rmanPtc::buildChannelMenu );
+static PRM_Name sep1( "sep1", "Sep1" );
+static PRM_Name sep2( "sep2", "Sep2" );
 
-static PRM_Name sep1("sep1", "Sep1");
-static PRM_Name sep2("sep2", "Sep2");
-
+// our Sop parameters
 PRM_Template SOP_rmanPtc::myParameters[] = {
     PRM_Template(PRM_FILE, 1, &ptcFileName),
     PRM_Template(PRM_TOGGLE, 1, &boundOnLoadName, &boundOnLoadDefault),
-    PRM_Template(PRM_INT, 1, &percentageName, &percentageDefault, 0, &percentageRange),
-    PRM_Template(PRM_SEPARATOR, 1, &sep1),
-    PRM_Template(PRM_INT, 1, &displayPercentageName, &percentageDefault, 0, &percentageRange),
-    PRM_Template(PRM_SEPARATOR, 1, &sep2),
-    PRM_Template(PRM_TOGGLE, 1, &previewName, &previewDefault ),
+    PRM_Template(PRM_INT, 1, &percentageName, &percentageDefault, 0,
+            &percentageRange),
+    PRM_Template(PRM_SEPARATOR, 1, &sep1 ),
+    PRM_Template(PRM_INT, 1, &displayPercentageName, &percentageDefault, 0,
+            &percentageRange),
     PRM_Template(PRM_ORD, 1, &channelName, 0, &channelMenu ),
-    PRM_Template(PRM_FLT, 1, &pointSizeName, &pointSizeDefault, 0, &pointSizeRange ),
+    PRM_Template(PRM_TOGGLE, 1, &onlyOutputPreviewChannelName,
+            &onlyOutputPreviewChannelDefault ),
+    PRM_Template(PRM_SEPARATOR, 1, &sep2),
+    PRM_Template(PRM_FLT, 1, &pointSizeName, &pointSizeDefault, 0,
+            &pointSizeRange ),
     PRM_Template(PRM_TOGGLE, 1, &useDiskName, &useDiskDefault ),
     PRM_Template()
 };
 
-// Here's how we define local variables for the SOP.
+// Here's how we define local variables and their integer mappings for the SOP.
 enum {
 	VAR_PTCFILE,	// Our ptc file
 	VAR_PERCENTAGE,	// Percentage to draw
 	VAR_BOUNDONLOAD, // Bound on load?
     VAR_DISPLAYPERCENTAGE, // cache points in memory
-    VAR_GLPREVIEW, // use gl to preview values
     VAR_CHANNEL, // display channel
-    VAR_POINTSIZE,
-    VAR_USEDISK,
+    VAR_POINTSIZE, // point/disk size
+    VAR_USEDISK, // preview as disks
+    VAR_OUTPUTDISPLAYCHANNELONLY, // only output display channel into geo
 };
-
 CH_LocalVariable SOP_rmanPtc::myVariables[] = {
-    { "PTCFILE",	VAR_PTCFILE, 0 },		// The table provides a mapping
-    { "PERCENTAGE",	VAR_PERCENTAGE, 0 },    // from text string to integer token
+    { "PTCFILE",	VAR_PTCFILE, 0 },
+    { "PERCENTAGE",	VAR_PERCENTAGE, 0 },
     { "BOUNDONLOAD", VAR_BOUNDONLOAD, 0},
-    { "DISPLAYPERCENTAGE", VAR_DISPLAYPERCENTAGE, 0 },    // from text string to integer token
-    { "GLPREVIEW", VAR_GLPREVIEW, 0 },
+    { "DISPLAYPERCENTAGE", VAR_DISPLAYPERCENTAGE, 0 },
     { "CHANNEL", VAR_CHANNEL, 0 },
     { "POINTSIZE", VAR_POINTSIZE, 0 },
     { "USEDISK", VAR_USEDISK, 0 },
+    { "OUTPUTDISPLAYCHANNELONLY", VAR_OUTPUTDISPLAYCHANNELONLY, 0 },
     { 0, 0, 0 },
 };
 
@@ -105,7 +142,8 @@ OP_Node *SOP_rmanPtc::myConstructor(OP_Network *net,
 }
 
 // dynamically build our channel menu
-void SOP_rmanPtc::buildChannelMenu( void *data, PRM_Name *theMenu, int theMaxSize, const PRM_SpareData *, PRM_Parm * )
+void SOP_rmanPtc::buildChannelMenu( void *data, PRM_Name *theMenu,
+        int theMaxSize, const PRM_SpareData *, PRM_Parm * )
 {
     SOP_rmanPtc *me = reinterpret_cast<SOP_rmanPtc*>(data);
     if ( !me )
@@ -140,10 +178,11 @@ SOP_rmanPtc::SOP_rmanPtc(OP_Network *net, const char *name, OP_Operator *op)
       mBoundOnLoad(false),
       mLoadPercentage(100),
       mDisplayPercentage(100),
-      mGlPreview(1),
       mPointSize(1.0),
       mUseDisk(0),
-      mHasBBox(false)
+      mHasBBox(false),
+      mOnlyOutputDisplayChannel(true),
+      mDisplayChannel(0)
 {
 }
 
@@ -152,16 +191,20 @@ SOP_rmanPtc::~SOP_rmanPtc()
 {
 }
 
+// decorate our input label
 const char *SOP_rmanPtc::inputLabel( unsigned pos ) const
 {
     return "Bounding Source";
 }
 
+// make the input a reference
 int SOP_rmanPtc::isRefInput( unsigned pos ) const
 {
     return 1;
 }
 
+// this is used to deallocate the provided GU_Detail object and reassign
+// one of our GU_Detail-derived rmanPtcDetail instances
 rmanPtcDetail *SOP_rmanPtc::allocateNewDetail()
 {
     // get our gdp and replace it with a new rmanPtcDetailobject
@@ -172,21 +215,22 @@ rmanPtcDetail *SOP_rmanPtc::allocateNewDetail()
     return ptc_gdp;
 }
 
-// the guts of the Sop
+// the bit that does all the work
 OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
 {
-    // get parameters
+    // get some useful bits & bobs
     UT_Interrupt *boss;
     float now = context.myTime;
     UT_String ptcFile = getPtcFile(now);
     int loadPercentage = getLoadPercentage(now);
     int displayPercentage = getDisplayPercentage(now);
-    int glPreview = getGlPreview(now);
     float pointSize = getPointSize(now);
     int useDisk = getUseDisk(now);
     int boundOnLoad = getBoundOnLoad(now);
+    int displayChannel = getDisplayChannel(now);
+    int onlyOutputDisplayChannel = getOnlyOutputDisplayChannel(now);
 
-    // lock inputs
+    // lock out inputs
     if ( lockInputs(context) >= UT_ERROR_ABORT)
         error();
 
@@ -204,7 +248,7 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         ptc_gdp->clearAndDestroy();
 
         // start our work
-        boss->opStart("Building rmanPtc output");
+        boss->opStart("Loading point cloud");
 
         // get our bbox
         bool has_bbox = false;
@@ -212,12 +256,14 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         updateBBox( input_geo );
 
         // pass information to our detail
-        ptc_gdp->use_gl = glPreview;
         ptc_gdp->point_size = pointSize;
         ptc_gdp->use_disk = useDisk;
         ptc_gdp->cull_bbox = mBBox;
         ptc_gdp->use_cull_bbox = (mHasBBox&&(!mBoundOnLoad))?true:false;
         ptc_gdp->display_probability = displayPercentage/100.f;
+        ptc_gdp->display_channel = displayChannel;
+        if ( onlyOutputDisplayChannel )
+            ptc_gdp->display_channel = 0;
 
         // here we load our ptc
         if ( mReload )
@@ -231,7 +277,8 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
             mRedraw = true;
             
             // open the point cloud
-            PtcPointCloud ptc = PtcSafeOpenPointCloudFile( const_cast<char*>(ptcFile.buffer()) );
+            PtcPointCloud ptc = PtcSafeOpenPointCloudFile(
+                    const_cast<char*>(ptcFile.buffer()) );
             if ( !ptc )
             {
                 UT_String msg( "Unable to open input file: " );
@@ -241,17 +288,23 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
                 return error();
             }
 
-            // get some information
+            // get some information from the ptc
             ptc_gdp->path = std::string(ptcFile.fileName());
             char **vartypes, **varnames;
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("npoints"), &ptc_gdp->nPoints );
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("npointvars"), &ptc_gdp->nChannels );
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvartypes"), &vartypes );
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvarnames"), &varnames );
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("datasize"), &ptc_gdp->datasize );
-            PtcGetPointCloudInfo( ptc, const_cast<char*>("bbox"), ptc_gdp->bbox );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("npoints"),
+                    &ptc_gdp->nPoints );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("npointvars"),
+                    &ptc_gdp->nChannels );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvartypes"),
+                    &vartypes );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("pointvarnames"),
+                    &varnames );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("datasize"),
+                    &ptc_gdp->datasize );
+            PtcGetPointCloudInfo( ptc, const_cast<char*>("bbox"),
+                    ptc_gdp->bbox );
 
-            // our channel names
+            // process our channel names
             ptc_gdp->types.clear();
             ptc_gdp->names.clear();
             for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
@@ -262,10 +315,10 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
                 mChannelNames.push_back( name );
             }
 
-            // what percentage of points to load?
+            // what percentage of points should we load?
             float load_probability = loadPercentage/100.f;
 
-            // load a percentage of points into memory
+            // load points into memory
             float point[3], normal[3];
             float radius;
             float data[ptc_gdp->datasize];
@@ -293,6 +346,7 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
                 for ( unsigned int j=0; j<ptc_gdp->datasize; ++j )
                     cacheData.push_back( data[j] );
 
+                // break for the interrupt handler (i.e. press ESC)
                 if ( boss->opInterrupt() )
                     break;
             }
@@ -309,20 +363,27 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         // build a new primitive
         GU_PrimParticle::build( ptc_gdp, cachePoints.size(), 0 );
 
-        // create our output geometry using the output % parameter (same as GR_ uses to preview) 
+        // create our output geometry using the output % parameter
+        // this is the same variable as GR_ uses to preview
         std::vector<UT_Vector3>::const_iterator pos_it = cachePoints.begin();
         std::vector<UT_Vector3>::const_iterator norm_it = cacheNormals.begin();
         std::vector<float>::const_iterator rad_it = cacheRadius.begin();
         std::vector<float>::const_iterator data_it = cacheData.begin();
 
-        // add some attributes
-        int n_attrib = ptc_gdp->addPointAttrib( "N", sizeof(UT_Vector3), GB_ATTRIB_VECTOR, 0 );
-        int r_attrib = ptc_gdp->addPointAttrib( "radius", sizeof(float), GB_ATTRIB_FLOAT, 0 );
+        // add some standard attributes
+        int n_attrib = ptc_gdp->addPointAttrib( "N", sizeof(UT_Vector3),
+                GB_ATTRIB_VECTOR, 0 );
+        int r_attrib = ptc_gdp->addPointAttrib( "radius", sizeof(float),
+                GB_ATTRIB_FLOAT, 0 );
+        ptc_gdp->N_attrib = n_attrib;
+        ptc_gdp->R_attrib = r_attrib;
 
-        // our data attributes
+        // process the rest of our data attributes
         std::vector<GB_AttribType> data_types;
-        std::vector<int> data_size;
-        std::vector<int> data_attribs;
+        std::vector<int> data_size, data_attribs, data_offset;
+        int offset_total = 0;
+        ptc_gdp->attributes.clear();
+        ptc_gdp->attribute_size.clear();
         for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
         {
             GB_AttribType type = GB_ATTRIB_FLOAT; // float, vector
@@ -342,22 +403,46 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
             {
                 size=16;
             }
-            data_attribs.push_back(
-                    ptc_gdp->addPointAttrib( ptc_gdp->names[i].c_str(),
-                            sizeof(float)*size, type, 0 ) );
+            offset_total += size;
+
             data_types.push_back( type );
             data_size.push_back( size );
-        }
+            data_offset.push_back( offset_total );
 
-        // add data from our cache, based on display/output probability
+            if ( onlyOutputDisplayChannel )
+            {
+                if ( displayChannel==i )
+                {
+                    int attrib = ptc_gdp->addPointAttrib(
+                            ptc_gdp->names[i].c_str(), sizeof(float)*size,
+                            type, 0 );
+                    ptc_gdp->attributes.push_back( attrib );
+                    ptc_gdp->attribute_size.push_back( size );
+                    data_attribs.push_back( attrib );
+                }
+            }
+            else
+            {
+                int attrib = ptc_gdp->addPointAttrib( ptc_gdp->names[i].c_str(),
+                        sizeof(float)*size, type, 0 );
+                ptc_gdp->attributes.push_back( attrib );
+                ptc_gdp->attribute_size.push_back( size );
+                data_attribs.push_back( attrib );
+            }
+        }
+        cacheDataOffsets = data_offset;
+
+        // add data from our cached points to geometry
+        // based on display/output probability
         srand(0);
-        unsigned int pos = 0;
         while( pos_it!=cachePoints.end() )
         {
             if ( rand()/(float)RAND_MAX<=ptc_gdp->display_probability )
             {
-                if ( !ptc_gdp->use_cull_bbox )
-                {                   
+                if ( (!ptc_gdp->use_cull_bbox) ||
+                        (ptc_gdp->use_cull_bbox &&
+                                ptc_gdp->cull_bbox.isInside( *pos_it ) ) )
+                {
                     // add to our SOP geometry
                     GEO_Point *pt = ptc_gdp->appendPoint();
                     pt->setPos( *pos_it );
@@ -366,24 +451,21 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
                     const float *data = &*data_it;
                     for ( unsigned int i=0; i<data_types.size(); ++i )
                     {
-                        float *ptr = pt->castAttribData<float>(data_attribs[i]);
-                        memcpy( (void*)ptr, (void*)data,
-                                    sizeof(float)*data_size[i] );
-                        data += data_size[i];
-                    }
-                }
-                else // we cull with our bbox
-                {
-                    if ( ptc_gdp->cull_bbox.isInside( *pos_it ) )
-                    {
-                        GEO_Point *pt = ptc_gdp->appendPoint();
-                        pt->setPos( *pos_it );
-                        (*pt->castAttribData<UT_Vector3>(n_attrib)) = *norm_it;
-                        (*pt->castAttribData<float>(r_attrib)) = *rad_it;
-                        const float *data = &*data_it;
-                        for ( unsigned int i=0; i<data_types.size(); ++i )
+                        if ( onlyOutputDisplayChannel )
                         {
-                            float *ptr = pt->castAttribData<float>(data_attribs[i]);
+                            if ( i==displayChannel )
+                            {
+                                float *ptr = pt->castAttribData<float>(
+                                        data_attribs[0]);
+                                memcpy( (void*)ptr, (void*)data,
+                                            sizeof(float)*data_size[i] );
+                            }
+                            data += data_size[i];
+                        }
+                        else
+                        {
+                            float *ptr = pt->castAttribData<float>(
+                                    data_attribs[i]);
                             memcpy( (void*)ptr, (void*)data,
                                         sizeof(float)*data_size[i] );
                             data += data_size[i];
@@ -397,7 +479,6 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
             norm_it++;
             rad_it++;
             data_it+=ptc_gdp->datasize;
-            pos++;
         }
 
         // delete our particle primitive
@@ -406,7 +487,8 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         // info in sop's message area
         std::stringstream ss;
         ss << "Name: " << ptc_gdp->path << std::endl;
-        ss << "Points: " << ptc_gdp->nPoints << " - [ " << ptc_gdp->nLoaded << " loaded ]" << std::endl;
+        ss << "Points: " << ptc_gdp->nPoints << " - [ " <<
+                ptc_gdp->nLoaded << " loaded ]" << std::endl;
         ss << "Channels: " << ptc_gdp->nChannels << std::endl;
         for ( unsigned int i=0; i<ptc_gdp->nChannels; ++i )
             ss << "  " << i << ": " << mChannelNames[i] << std::endl;

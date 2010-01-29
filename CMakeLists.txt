@@ -22,8 +22,7 @@ include_directories(
   )
 
 add_library( rman_ptc_sop
-  SHARED 
-  ${CMAKE_SOURCE_DIR}/src/rmanPtcDetail.cpp
+  SHARED
   ${CMAKE_SOURCE_DIR}/src/SOP_rmanPtc.cpp
   ${CMAKE_SOURCE_DIR}/src/GR_rmanPtc.cpp
   )
