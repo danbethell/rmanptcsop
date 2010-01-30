@@ -49,16 +49,10 @@ FIND_LIBRARY( 3Delight_LIBRARIES 3delight
 GET_FILENAME_COMPONENT( 3Delight_LIBRARY_DIR ${3Delight_LIBRARIES} PATH )
 
 # did we find everything?
-SET( 3Delight_FOUND "NO" )
-IF( 3Delight_INCLUDE_DIR )
-  IF( 3Delight_LIBRARIES )
-    SET( 3Delight_FOUND "YES" )
-    MESSAGE(STATUS "Found 3Delight" )
-  ENDIF( 3Delight_LIBRARIES )
-ENDIF( 3Delight_INCLUDE_DIR )
-
-IF( 3Delight_FIND_REQUIRED )
-  IF( NOT 3Delight_FOUND )
-    MESSAGE(FATAL_ERROR "Could not find REQUIRED 3Delight!" )
-  ENDIF( NOT 3Delight_FOUND )
-ENDIF( 3Delight_FIND_REQUIRED )
+INCLUDE( FindPackageHandleStandardArgs )
+FIND_PACKAGE_HANDLE_STANDARD_ARGS( "3Delight" DEFAULT_MSG
+  3Delight_INCLUDE_DIR
+  3Delight_COMPILE_FLAGS
+  3Delight_LIBRARIES
+  3Delight_LIBRARY_DIR
+  )
