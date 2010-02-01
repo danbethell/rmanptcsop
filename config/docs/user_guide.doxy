@@ -1,6 +1,7 @@
 /*! 
 \mainpage RmanPtcSop
 \section Overview
+
 The RmanPtcSop project is a Houdini geometry operator (SOP) for loading and
 displaying RenderMan point clouds. It is based on the open source 
 <a href="http://dneg.github.com/dnPtcViewerNode">dnPtcViewerNode</a> project
@@ -16,16 +17,17 @@ Features of the <b>rmanPtc</b> SOP include:
 <li>Ability to cull points based on a reference bounding box.</li>
 </ul>
 
-\image html rmanPtc_grab1.jpg
-
-<b>RenderMan® is a registered trademark of Pixar.<br>
-Houdini® is a registered trademark of Side Effects Software.</b>
-
 The code is freely available from http://github.com/danbethell/rmanptcsop
 and is released under the New BSD license. See \link COPYING \endlink
 for more details.
 
 For information on building and installing the Houdini plugin see the \link BUILDING Building & Installation\endlink page.
+
+\image html rmanPtc_grab1.jpg
+
+<b>RenderMan® is a registered trademark of Pixar.<br>
+Houdini® is a registered trademark of Side Effects Software.</b>
+
 
 \section loading Loading Point Clouds
 Point clouds can be very large and loading is the most expensive (i.e. slowest) part of the process so it's a good idea to avoid reloading of the point cloud unless necessary.
@@ -161,6 +163,12 @@ Creating Custom Plugins</a> section of the HDK Documentation.
 <td><i>$HOME/houdiniX.Y/help/nodes/sop</i></td>
 </tr>
 </table>
+
+\section Documentation
+RmanPtcSop comes with a Houdini help card but you can also build these documentation pages if you like. Just run doxygen from the project root on the <i>config/docs/doxygen.cfg</i> file and the documentation will be generated in a <i>docs</i> directory.
+\verbatim
+dan@samus:~/code/rmanptcsop$ doxygen config/docs/doxygen.cfg
+\endverbatim
 
 
 
