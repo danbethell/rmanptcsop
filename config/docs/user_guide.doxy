@@ -157,11 +157,6 @@ Creating Custom Plugins</a> section of the HDK Documentation.
 <td><pre>$HOUDINI_PATH/help</pre></td>
 <td><i>$HOME/houdiniX.Y/help/nodes/sop</i></td>
 </tr>
-<tr>
-<td>Help Card Icon (rmanPtc.png)</td>
-<td><pre>$HOUDINI_PATH/help</pre></td>
-<td><i>$HOME/houdiniX.Y/help/nodes/sop</i></td>
-</tr>
 </table>
 
 \section Documentation

@@ -1,1 +1,44 @@
-Hello, world
+#type: node
+#context: sop
+#internal: rmanPtc
+#tags: renderman, point, cloud, ptc, rmanPtcSop
+
+= RmanPtc =
+
+""" Loads and displays a RenderMan Point Cloud. """
+
+For full documentation see http://danbethell.github.com/rmanptcsop
+
+@parameters
+
+Ptc File:
+    #channels: /ptcFile
+    The RenderMan Point Cloud to load
+
+Bound On Load:
+    #channels: /bboxload
+    Bound the point cloud on load
+
+Load %:
+    #channels: /perc
+    Percentage of points to load into memory.
+
+Display / Output %:
+    #channels: /disp
+    Percentage of loaded points to display/output.
+
+Display Channel:
+    #channels: /chan
+    Point Cloud channel to preview/output.
+
+Output Display Channel Only:
+    #channels: /dispchanonly
+    Limit output of attributes to selected display channel.
+
+Point/Disk Size:
+    #channels: /pointsize
+    Size of point/disk in OpenGL preview.
+
+Display Disks:
+    #channels: /usedisk
+    Preview points as normal-aligned disks.

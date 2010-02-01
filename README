@@ -1,0 +1,20 @@
+RmanPtcSop
+==========
+The RmanPtcSop project is a Houdini geometry operator (SOP) for loading and 
+displaying RenderMan point clouds. It is based on the open source 
+dnPtcViewerNode project from Double Negative Visual Effects.
+
+Features of the rmanPtc SOP include:
+* Independent control for limiting the number of points loaded and displayed.
+* Geometry output for all point attributes in the cloud.
+* OpenGL display preview for attributes as point or disk primitives.
+* Ability to cull points based on a reference bounding box.
+
+The code is freely available from http://github.com/danbethell/rmanptcsop and 
+is released under the New BSD license. See the COPYING file for more details.
+
+For more information please refer to the documentation here:
+http://danbethell.github.com/rmanptcsop
+
+--
+Dan Bethell (danbethell at gmail dot com)
