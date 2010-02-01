@@ -16,7 +16,7 @@ Features of the <b>rmanPtc</b> SOP include:
 <li>Ability to cull points based on a reference bounding box.</li>
 </ul>
 
-\image html rmanPtc_grab1_small.jpg
+\image html rmanPtc_grab1.jpg
 
 <b>RenderMan® is a registered trademark of Pixar.<br>
 Houdini® is a registered trademark of Side Effects Software.</b>
@@ -28,18 +28,52 @@ for more details.
 For information on building and installing the Houdini plugin see the \link BUILDING Building & Installation\endlink page.
 
 \section loading Loading Point Clouds
+Point clouds can be very large and loading is the most expensive (i.e. slowest) part of the process so it's a good idea to avoid reloading of the point cloud unless necessary.
+
+The point cloud is reloaded when any of these occurs:
+<ul>
+<li>The <b>Ptc File</b> parameter changes.</li>
+<li>The <b>Load %</b> parameter changes.</li>
+<li>The bounding box input changes and the <b>Bound on Load</b> parameter is on.</li>
+</ul>
+
+RmanPtcSop uses a probability-based method for loading a percentage of the cloud into memory. This has the advantage of always generating an even distribution of points throughout the cloud but does require the entire cloud to be read from disk each time. That means that regardless of the <b>Load %</b> parameter the load time is constant for a particular ptc file.
+
+
+\image html load100percent.jpg 100% Loaded
+\image html load5percent.jpg 5% Loaded
 
 \section information Point Cloud Information
+A variety of information is available about the point cloud via the node's MMB information area. In addition to the normal Houdini geometry information you can see the total number of points in the cloud, how many are loaded into memory and the channels stored in the cloud.
 
-\section output Display & Geometry Output
+\image html ptc_info.jpg
 
 \section display Display Options
 
+RmanPtcSop has separate controls for the points loaded into memory and those dislayed in the viewport. This allows for fast control of the <b>Display / Output %</b> parameter. This parameter is based on a percentage of those loaded into memory, so if <b>Load %</b> and <b>Display / Output %</b> are both set to <b>10</b> then 10% of the point cloud will be loaded into memory and 10% of those will be displayed (i.e. 1% of the total points). The display percentage is also probability-based which means you get an even distribution of points throughout the cloud.
+
+The OpenGL display preview will colour the points based on the selected <b>Display Channel</b> parameter. By default the points are drawn as 1-pixel points but you can change their size by using the <b>Point/Disk Size</b> parameter. You can also display the points as normal-aligned disks by turning on the <b>Display Disks</b> parameter. Disk size is also controlled by the <b>Point/Disk Size</b> parameter but is also affected by the radius attribute of the point.
+
+\image html point_size.jpg Points
+\image html disk_preview.jpg Disks
+
+\section output Display & Geometry Output
+
+In addition to the OpenGL preview, any display points are output from the node as native Houdini point geometry. The node outputs position (P), normal (N) and radius for each point as well as the value of the selected display channel. You can output all channel information for each point by turning off the <b>Output Display Channel Only</b> parameter.
+
+\image html ptc_spreadsheet.jpg
+
 \section bounds Bounding Point Clouds
+
+RmanPtcSop has a reference input for specifying an axis-aligned bounding box for the point cloud. By default this culls the display/output points allowing you to quickly isolate a particular area of the cloud. By turning on the <b>Bound On Load</b> parameter the bounding box instead culls the points before they are loaded into memory. This can dramatically improve performance for spatially-large point clouds but if the bounding box input changes then the entire point cloud will be reloaded.
+
+\image html bbox_input.jpg       
 
 \section tips Hints & Tips
 <ul>
-<li>To apply transformation to the OpenGL preview use an <b>Object</b> level transform. Using a Transform node in the Geometry context (i.e. a transformSop) will move the output point geometry but will clear the preview rendering.</li>
+<li>To apply transformation to the OpenGL preview use an <b>Object</b> level transform. Using a Transform node in the Geometry context (i.e. a transformSop) will move the output point geometry but will cancel the preview rendering.</li>
+<li>If you know a point cloud is very large then set the <b>Load %</b> parameter before specifying the filename.
+<li>Disk preview is much more expensive than using points. Use with caution on very large clouds.
 </ul>
 
 \section authors Authors
@@ -49,6 +83,7 @@ For information on building and installing the Houdini plugin see the \link BUIL
 <ul><li>Philippe Leprince and Michael Jones from <a href="http://dneg.com">Double Negative Visual Effects</a> for the <a href="http://dneg.github.com/dnPtcViewerNode">dnPtcViewerNode</a> project.</li></ul>
 
 \page BUILDING Building & Installation
+\section Building
 The plugin will theoretically build for any RenderMan-compatible renderer
 that implements the pointcloud api but the included <a href="http://cmake.com">
 CMake</a> build script assumes you have <a href="http://3delight.com">3Delight</a> 
@@ -66,6 +101,33 @@ following environment variables before running <i>cmake</i>.
  <li><b>HFS</b> - The path to your Houdini install.
 </ul>
 
+Run <i>cmake</i> and then <i>make</i>.
+\verbatim
+dan@samus:~/code/rmanptcsop$ cmake .
+-- The C compiler identification is GNU
+-- The CXX compiler identification is GNU
+-- Check for working C compiler: /usr/bin/gcc
+-- Check for working C compiler: /usr/bin/gcc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++
+-- Check for working CXX compiler: /usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Found Houdini: /opt/hfs10.0.528/toolkit/include
+-- Found 3Delight: /usr/local/3delight-9.0.9/Linux-x86_64/include
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/dan/code/rmanptcsop
+dan@samus:~/code/rmanptcsop$ make
+Scanning dependencies of target rman_ptc_sop
+[ 50%] Building CXX object CMakeFiles/rman_ptc_sop.dir/src/SOP_rmanPtc.cpp.o
+[100%] Building CXX object CMakeFiles/rman_ptc_sop.dir/src/GR_rmanPtc.cpp.o
+Linking CXX shared library rmanPtcSop.so
+[100%] Built target rman_ptc_sop
+\endverbatim
+
+\section Installation
 Once built you will need to copy the plugin and the support files (located in 
 the <i>share</i> subdirectory) to a destination that Houdini recognises. 
 For more information on custom plugins and support file installation locations 
