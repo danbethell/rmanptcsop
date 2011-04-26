@@ -69,8 +69,8 @@ namespace rmanPtcSop
             int datasize;
             std::vector<std::string> types;
             std::vector<std::string> names;
-            int N_attrib, R_attrib;
-            std::vector<int> attributes;
+            GB_AttributeRef N_attrib, R_attrib;
+            std::vector<GB_AttributeRef> attributes;
             std::vector<int> attribute_size;
             std::string path;
             float bbox[6];

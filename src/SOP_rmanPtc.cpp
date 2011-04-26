@@ -38,10 +38,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <CH/CH_LocalVariable.h>
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_Parm.h>
+#include <PRM/PRM_SpareData.h>
 #include <OP/OP_Operator.h>
 #include <OP/OP_OperatorTable.h>
 #include <GU/GU_PrimPart.h>
 #include <GEO/GEO_AttributeHandle.h>
+#include <OBJ/OBJ_Camera.h>
+#include <OP/OP_Director.h>
 
 // c++ stuff
 #include <sstream>
@@ -74,7 +77,7 @@ static PRM_Name ptcFileName("ptcFile", "Ptc File");
 static PRM_Name percentageName("perc", "Load %%%");
 static PRM_Name boundOnLoadName("bboxload", "Bound On Load");
 static PRM_Default boundOnLoadDefault(0.0);
-static PRM_Name displayPercentageName("disp", "Display / Output %%%");
+static PRM_Name displayPercentageName("disp", "Display/Output %%%");
 static PRM_Default percentageDefault( 100.0 );
 static PRM_Range percentageRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 100 );
 static PRM_Name channelName("chan", "Display Channel");
@@ -88,8 +91,14 @@ static PRM_Default useDiskDefault( 0 );
 static PRM_Name pointSizeName("pointsize", "Point/Disk Size");
 static PRM_Default pointSizeDefault( 1.0 );
 static PRM_Range pointSizeRange( PRM_RANGE_UI, 0, PRM_RANGE_UI, 10 );
+static PRM_Name cameraPathName( "cullcamera", "Cull Camera" );
+static PRM_Name nearFarDensityName( "nearfardensity", "Near/Far Density" );
+static PRM_Default nearFarDensityDefault[2] = { PRM_Default( 1.0 ),
+        PRM_Default(1.0) };
+static PRM_Range nearFarDensityRange[2] = { PRM_Range(), PRM_Range() };
 static PRM_Name sep1( "sep1", "Sep1" );
 static PRM_Name sep2( "sep2", "Sep2" );
+static PRM_Name sep3( "sep3", "Sep3" );
 
 // our Sop parameters
 PRM_Template SOP_rmanPtc::myParameters[] = {
@@ -98,12 +107,20 @@ PRM_Template SOP_rmanPtc::myParameters[] = {
     PRM_Template(PRM_INT, 1, &percentageName, &percentageDefault, 0,
             &percentageRange),
     PRM_Template(PRM_SEPARATOR, 1, &sep1 ),
+/*
+  // camera culling still wip
+    PRM_Template(PRM_STRING, PRM_TYPE_DYNAMIC_PATH, 1, &cameraPathName,
+            0, 0, 0, 0, &PRM_SpareData::objCameraPath),
+    PRM_Template(PRM_FLT, 2, &nearFarDensityName, &nearFarDensityDefault[0], 0,
+            &nearFarDensityRange[0] ),
+    PRM_Template(PRM_SEPARATOR, 1, &sep2 ),
+*/
     PRM_Template(PRM_INT, 1, &displayPercentageName, &percentageDefault, 0,
             &percentageRange),
     PRM_Template(PRM_ORD, 1, &channelName, 0, &channelMenu ),
     PRM_Template(PRM_TOGGLE, 1, &onlyOutputPreviewChannelName,
             &onlyOutputPreviewChannelDefault ),
-    PRM_Template(PRM_SEPARATOR, 1, &sep2),
+    PRM_Template(PRM_SEPARATOR, 1, &sep3),
     PRM_Template(PRM_FLT, 1, &pointSizeName, &pointSizeDefault, 0,
             &pointSizeRange ),
     PRM_Template(PRM_TOGGLE, 1, &useDiskName, &useDiskDefault ),
@@ -120,6 +137,8 @@ enum {
     VAR_POINTSIZE, // point/disk size
     VAR_USEDISK, // preview as disks
     VAR_OUTPUTDISPLAYCHANNELONLY, // only output display channel into geo
+    VAR_CULLCAMERA, // view frustum culling
+    VAR_NEARFARDENSITY, // near/far clip-plane multiplier
 };
 CH_LocalVariable SOP_rmanPtc::myVariables[] = {
     { "PTCFILE",	VAR_PTCFILE, 0 },
@@ -130,6 +149,8 @@ CH_LocalVariable SOP_rmanPtc::myVariables[] = {
     { "POINTSIZE", VAR_POINTSIZE, 0 },
     { "USEDISK", VAR_USEDISK, 0 },
     { "OUTPUTDISPLAYCHANNELONLY", VAR_OUTPUTDISPLAYCHANNELONLY, 0 },
+    { "CULLCAMERA", VAR_CULLCAMERA, 0 },
+    { "NEARFARDENSITY", VAR_NEARFARDENSITY, 0 },
     { 0, 0, 0 },
 };
 
@@ -182,7 +203,10 @@ SOP_rmanPtc::SOP_rmanPtc(OP_Network *net, const char *name, OP_Operator *op)
       mUseDisk(0),
       mHasBBox(false),
       mOnlyOutputDisplayChannel(true),
-      mDisplayChannel(0)
+      mDisplayChannel(0),
+      mCullCamera(""),
+      mNearDensity(1.f),
+      mFarDensity(1.f)
 {
 }
 
@@ -229,6 +253,11 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
     int boundOnLoad = getBoundOnLoad(now);
     int displayChannel = getDisplayChannel(now);
     int onlyOutputDisplayChannel = getOnlyOutputDisplayChannel(now);
+    /*
+      float nearDensity = getNearDensity(now);
+      float farDensity = getFarDensity(now);
+      UT_String cullCamera = getCullCamera(now);
+    */
 
     // lock out inputs
     if ( lockInputs(context) >= UT_ERROR_ABORT)
@@ -371,16 +400,17 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         std::vector<float>::const_iterator data_it = cacheData.begin();
 
         // add some standard attributes
-        int n_attrib = ptc_gdp->addPointAttrib( "N", sizeof(UT_Vector3),
+        GB_AttributeRef n_attrib = ptc_gdp->addPointAttrib( "N", sizeof(UT_Vector3),
                 GB_ATTRIB_VECTOR, 0 );
-        int r_attrib = ptc_gdp->addPointAttrib( "radius", sizeof(float),
+        GB_AttributeRef r_attrib = ptc_gdp->addPointAttrib( "radius", sizeof(float),
                 GB_ATTRIB_FLOAT, 0 );
         ptc_gdp->N_attrib = n_attrib;
         ptc_gdp->R_attrib = r_attrib;
 
         // process the rest of our data attributes
         std::vector<GB_AttribType> data_types;
-        std::vector<int> data_size, data_attribs, data_offset;
+        std::vector<GB_AttributeRef> data_attribs;
+        std::vector<int> data_size, data_offset;
         int offset_total = 0;
         ptc_gdp->attributes.clear();
         ptc_gdp->attribute_size.clear();
@@ -413,7 +443,7 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
             {
                 if ( displayChannel==i )
                 {
-                    int attrib = ptc_gdp->addPointAttrib(
+                    GB_AttributeRef attrib = ptc_gdp->addPointAttrib(
                             ptc_gdp->names[i].c_str(), sizeof(float)*size,
                             type, 0 );
                     ptc_gdp->attributes.push_back( attrib );
@@ -423,7 +453,7 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
             }
             else
             {
-                int attrib = ptc_gdp->addPointAttrib( ptc_gdp->names[i].c_str(),
+                GB_AttributeRef attrib = ptc_gdp->addPointAttrib( ptc_gdp->names[i].c_str(),
                         sizeof(float)*size, type, 0 );
                 ptc_gdp->attributes.push_back( attrib );
                 ptc_gdp->attribute_size.push_back( size );
@@ -432,12 +462,63 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
         }
         cacheDataOffsets = data_offset;
 
+/*
+        // cull camera
+        bool use_cull_cam = false;
+        UT_Vector3 cam_pos(0,0,0);
+        float cam_near=0.0, cam_far=0.0;
+
+        if ( cullCamera!="" )
+        {
+            OBJ_Node *cam_node = OPgetDirector()->findOBJNode( cullCamera );
+            if ( cam_node )
+            {
+                OBJ_Camera *cam = cam_node->castToOBJCamera();
+                if ( cam )
+                {
+                    UT_DMatrix4 mtx;
+                    cam->getWorldTransform( mtx, context );
+                    std::cerr << "mtx: " << mtx << std::endl;
+                    cam_pos *= mtx;
+                    std::cerr << "pos: " << cam_pos << std::endl;
+                    use_cull_cam = true;
+                    cam_near = cam->getNEAR(now);
+                    cam_far = cam->getFAR(now);
+                    std::cerr << "near: " << cam_near << std::endl;
+                    std::cerr << "far: " << cam_far << std::endl;
+
+                    mRedraw = true;
+                }
+            }
+            std::cerr << "cull camera: " << cullCamera << std::endl;
+            std::cerr << nearDensity << ", " << farDensity << std::endl;
+        }
+*/
         // add data from our cached points to geometry
         // based on display/output probability
         srand(0);
+        float density_mult = 1.f;
         while( pos_it!=cachePoints.end() )
         {
-            if ( rand()/(float)RAND_MAX<=ptc_gdp->display_probability )
+
+/*            
+            if ( use_cull_cam )
+            {
+                float dist = ((*pos_it)-cam_pos).length();
+                if ( dist<cam_near )
+                    density_mult = nearDensity;
+                else if ( dist>cam_far )
+                    density_mult = farDensity;
+                else
+                {
+                    float normalize_dist =( dist - cam_near ) / ( cam_far - cam_near );
+                    density_mult = 1.f - normalize_dist;
+                }
+            }
+*/
+
+            if ( rand()/(float)RAND_MAX <
+                    ptc_gdp->display_probability*density_mult )
             {
                 if ( (!ptc_gdp->use_cull_bbox) ||
                         (ptc_gdp->use_cull_bbox &&
@@ -455,19 +536,13 @@ OP_ERROR SOP_rmanPtc::cookMySop(OP_Context &context)
                         {
                             if ( i==displayChannel )
                             {
-                                float *ptr = pt->castAttribData<float>(
-                                        data_attribs[0]);
-                                memcpy( (void*)ptr, (void*)data,
-                                            sizeof(float)*data_size[i] );
+                                pt->set( data_attribs[0], data, data_size[i] );
                             }
                             data += data_size[i];
                         }
                         else
                         {
-                            float *ptr = pt->castAttribData<float>(
-                                    data_attribs[i]);
-                            memcpy( (void*)ptr, (void*)data,
-                                        sizeof(float)*data_size[i] );
+                            pt->set( data_attribs[i], data, data_size[i] );
                             data += data_size[i];
                         }
                     }

@@ -162,5 +162,5 @@ void GR_rmanPtc::renderShaded(GU_Detail *gdp,
 void newRenderHook( GR_RenderTable *table )
 {
     GR_rmanPtc *hook = new GR_rmanPtc;
-    table->addHook(hook);
+    table->addHook(hook, GR_RENDER_HOOK_VERSION );
 }

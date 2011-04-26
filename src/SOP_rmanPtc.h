@@ -83,6 +83,18 @@ namespace rmanPtcSop
                     mReload = true;
                 return mPtcFile;
             }
+            UT_String getCullCamera(float t)
+            {
+                std::string old(mCullCamera.buffer());
+                evalString( mCullCamera, "cullcamera", 0, t );
+                if ( std::string(mCullCamera.buffer())!=old )
+                {
+                    mRedraw = true;
+                    if ( mBoundOnLoad )
+                        mReload = true;
+                }
+                return mCullCamera;
+            }
             int getBoundOnLoad(float t)
             {
                 int old = mBoundOnLoad;
@@ -114,6 +126,22 @@ namespace rmanPtcSop
                 if ( mPointSize!=old )
                     mRedraw = true;
                 return mPointSize;
+            }
+            float getNearDensity(float t)
+            {
+                float old = mNearDensity;
+                mNearDensity = evalFloat( "nearfardensity", 0, t );
+                if ( mNearDensity!=old )
+                    mRedraw = true;
+                return mNearDensity;
+            }
+            float getFarDensity(float t)
+            {
+                float old = mFarDensity;
+                mFarDensity = evalFloat( "nearfardensity", 1, t );
+                if ( mFarDensity!=old )
+                    mRedraw = true;
+                return mFarDensity;
             }
             int getUseDisk(float t)
             {
@@ -179,6 +207,8 @@ namespace rmanPtcSop
             bool mHasBBox; // do we have a bbox to use?
             UT_BoundingBox mBBox; // our bounding box
             bool mOutputDisplayChannelOnly; // only output the display channel
+            float mNearDensity, mFarDensity; // near/far clip plane multiplier
+            UT_String mCullCamera;
 
             // storage for all loaded data
             std::vector<UT_Vector3> cachePoints;
