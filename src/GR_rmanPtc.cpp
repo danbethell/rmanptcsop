@@ -37,9 +37,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <GR/GR_RenderTable.h>
 #include <UT/UT_Interrupt.h>
 #include <UT/UT_DMatrix4.h>
+#include <UT/UT_DSOVersion.h> 
 
 // rman point cloud api
-#include <pointcloud.h>
+#include "pointcloud.h"
 
 // local headers
 #include "GR_rmanPtc.h"
@@ -72,7 +73,7 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
         // render as points
         GEO_Point *pt = 0;
         UT_Vector4 pos;
-        float col[3];
+        float col[3] = {1.0,1.0,1.0};
 
         if ( !detail->use_disk )
         {
@@ -89,17 +90,22 @@ void GR_rmanPtc::renderWire( GU_Detail *gdp,
                 pos = pt->getPos();
 
                 // display colour
-                float *ptr = pt->castAttribData<float>(
-                        detail->attributes[display_channel] );
-                if ( detail->attribute_size[display_channel]==1)
-                    col[0] = col[1] = col[2] = ptr[0];
-                else
-                {
-                    col[0] = ptr[0];
-                    col[1] = ptr[1];
-                    col[2] = ptr[2];
+                
+                float *ptr = NULL;
+                if (detail->attributes.size() >0) {
+                    ptr = pt->castAttribData<float>(
+                            detail->attributes[display_channel] );
+                    if (ptr) {
+                        if ( detail->attribute_size[display_channel]==1)
+                            col[0] = col[1] = col[2] = ptr[0];
+                        else
+                        {
+                            col[0] = ptr[0];
+                            col[1] = ptr[1];
+                            col[2] = ptr[2];
+                        }
+                    }
                 }
-
                 // draw point
                 if ( !detail->use_cull_bbox ||
                         detail->cull_bbox.isInside( pos ) )
